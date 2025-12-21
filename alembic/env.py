@@ -8,11 +8,11 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from core.database import Base
-from core.config import settings
-from auth.models import User
-from community.models import Post
-from replay.models import Replay
+from app.db.session import Base
+from app.core.config import settings
+from app.db.models.user import User
+from app.db.models.community import Post
+from app.db.models.replay import Replay
 
 # this is the Alembic Config object
 config = context.config

@@ -2,12 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from core.redis_client import get_redis, close_redis
-from auth.router import router as auth_router
-from matchmaking.router import router as matchmaking_router
-from game.router_ws import router as game_router
-from replay.router import router as replay_router
-from community.router import router as community_router
+from app.core.redis import get_redis, close_redis
+from app.api.v1.router import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,12 +24,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(auth_router)
-app.include_router(matchmaking_router)
-app.include_router(game_router)
-app.include_router(replay_router)
-app.include_router(community_router)
+# Include API router
+app.include_router(api_router)
 
 # Mount static files for test UI
 try:
@@ -62,4 +54,4 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
