@@ -7,15 +7,12 @@ from app.api.v1.router import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     await get_redis()
     yield
-    # Shutdown
     await close_redis()
 
 app = FastAPI(title="BaghChal Multiplayer Backend", lifespan=lifespan)
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,10 +21,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
 app.include_router(api_router)
 
-# Mount static files for test UI
 try:
     app.mount("/tests", StaticFiles(directory="tests"), name="tests")
 except:

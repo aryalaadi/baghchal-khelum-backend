@@ -1,293 +1,192 @@
 # BaghChal Multiplayer Backend
 
-A complete production-quality multiplayer BaghChal game backend built with FastAPI, WebSockets, Redis, and PostgreSQL.
+A real-time multiplayer backend implementation for the traditional Nepalese board game BaghChal (Tigers and Goats). Built with FastAPI, PostgreSQL, Redis, and WebSocket support.
 
-## 🎯 Features
+## Features
 
-- **JWT Authentication**: Secure user registration and login
-- **Real-time Gameplay**: WebSocket-based multiplayer game rooms
-- **Matchmaking System**: Redis-powered queue-based matchmaking
-- **ELO Rating System**: K=32 factor ELO ratings for competitive play
-- **Complete Game Logic**: Full BaghChal rules implementation with all win conditions
-- **Game Replays**: Store and retrieve game history
-- **Community Features**: Social posts and feed
-- **Test UI**: Complete HTML test interface for development
+- Real-time multiplayer gameplay via WebSocket
+- ELO rating system for competitive matchmaking
+- User authentication and authorization
+- Game replay system
+- Community features (posts and leaderboard)
+- Docker containerization for easy deployment
 
-## 🛠️ Tech Stack
+## Technology Stack
 
-- **Backend**: FastAPI (Python 3.12)
-- **WebSockets**: FastAPI WebSocket endpoints
-- **Game State**: Redis (in-memory state management)
-- **Database**: PostgreSQL + SQLAlchemy + Alembic
-- **Authentication**: JWT Bearer tokens
-- **ELO System**: Standard 32-K factor algorithm
+- **Framework**: FastAPI
+- **Database**: PostgreSQL with SQLAlchemy ORM
+- **Cache/Queue**: Redis
+- **Real-time**: WebSocket
+- **Migrations**: Alembic
+- **Containerization**: Docker & Docker Compose
 
-## 📦 Installation
+## Project Structure
 
-1. **Clone the repository**
+```
+bagchal-khelum-backend/
+├── app/
+│   ├── api/
+│   │   └── v1/
+│   │       └── endpoints/
+│   │           ├── auth.py
+│   │           ├── game.py
+│   │           ├── matchmaking.py
+│   │           ├── replay.py
+│   │           └── community.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── security.py
+│   │   └── redis.py
+│   ├── db/
+│   │   ├── models/
+│   │   │   ├── user.py
+│   │   │   ├── replay.py
+│   │   │   └── community.py
+│   │   └── session.py
+│   ├── schemas/
+│   │   ├── auth.py
+│   │   ├── game.py
+│   │   └── community.py
+│   └── services/
+│       ├── auth_service.py
+│       ├── elo_service.py
+│       ├── matchmaking_service.py
+│       ├── replay_service.py
+│       └── game/
+│           ├── game_service.py
+│           ├── manager.py
+│           └── connection_manager.py
+├── alembic/
+├── tests/
+│   └── static_test_ui.html
+├── docker-compose.yml
+├── Dockerfile
+├── main.py
+└── requirements.txt
+```
+
+## Installation
+
+### Using Docker (Recommended)
+
+1. Clone the repository
 ```bash
+git clone <repository-url>
 cd bagchal-khelum-backend
 ```
 
-2. **Install dependencies**
+2. Start the services
+```bash
+docker-compose up --build
+```
+
+The API will be available at `http://localhost:8000`
+
+### Manual Installation
+
+1. Create a virtual environment
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+2. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Set up environment variables**
-```bash
-cp .env.example .env
-# Edit .env with your database and Redis credentials
+3. Set up PostgreSQL and Redis
+- Install PostgreSQL and create a database
+- Install Redis
+
+4. Configure environment variables
+Create a `.env` file with:
+```env
+DATABASE_URL=postgresql://user:password@localhost/bagchal
+REDIS_URL=redis://localhost:6379
+SECRET_KEY=your-secret-key-here
 ```
 
-4. **Start PostgreSQL and Redis**
-```bash
-# Make sure PostgreSQL is running on localhost:5432
-# Make sure Redis is running on localhost:6379
-```
-
-5. **Run database migrations**
+5. Run database migrations
 ```bash
 alembic upgrade head
 ```
 
-6. **Start the server**
+6. Start the server
 ```bash
-python main.py
-# Or use uvicorn:
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload
 ```
 
-## 🎮 API Endpoints
+## API Endpoints
 
 ### Authentication
-- `POST /auth/register` - Register new user
-- `POST /auth/login` - Login user
+- `POST /auth/register` - Register a new user
+- `POST /auth/login` - Login and get access token
 
 ### Matchmaking
 - `POST /matchmaking/start` - Start matchmaking
+- `GET /matchmaking/status` - Check matchmaking status
 - `POST /matchmaking/cancel` - Cancel matchmaking
 
 ### Game
-- `WS /ws/game?token=<JWT>&matchId=<ID>` - WebSocket game connection
+- `WS /ws/game` - WebSocket connection for real-time gameplay
 
 ### Replay
-- `GET /replay/{game_id}` - Get game replay
-- `GET /replay/user/{user_id}` - Get user's replays
+- `GET /replay/{match_id}` - Get game replay data
+- `GET /replay/user/{user_id}` - Get user's game history
 
 ### Community
-- `POST /community/post` - Create post
+- `POST /community/post` - Create a community post
 - `GET /community/feed` - Get community feed
+- `GET /community/leaderboard` - Get user leaderboard with ELO ratings
 
-## 🧪 Testing
+## Game Rules
 
-Open the test UI in your browser:
-```
-http://localhost:8000/tests/static_test_ui.html
-```
+BaghChal is a traditional Nepalese board game played on a 5x5 grid.
 
-### Test Flow:
-1. Register or login with a username/password
-2. Click "Start Matchmaking" (open in 2 browser tabs for two players)
-3. Once matched, click "Connect to Game"
-4. Play by clicking on the board cells
-5. Watch the game state update in real-time
+### Players
+- **Goat Player**: Controls 20 goats
+- **Tiger Player**: Controls 4 tigers (placed at corners)
 
-## 🎲 Game Rules
+### Phases
 
-### BaghChal (Tigers and Goats)
+**Phase 1: Placement**
+- Goat player places goats one by one on empty intersections
+- Tiger player can move tigers after each goat placement
+- Continues until all 20 goats are placed
 
-**Objective:**
-- **Tigers**: Capture 5 goats to win
-- **Goats**: Block all tigers from moving to win
+**Phase 2: Movement**
+- Both players can move their pieces to adjacent intersections
+- Tigers can capture goats by jumping over them
 
-**Gameplay:**
-- **Phase 1**: Goats place pieces on empty points (20 goats total)
-- **Phase 2**: After all goats placed, goats can move
-- Tigers can move to adjacent points or capture by jumping over goats
-- Goats can only move to adjacent points (cannot capture)
-- Anti-repetition rule: No repeating board states in Phase 2
+### Winning Conditions
+- **Tigers win**: Capture 5 goats
+- **Goats win**: Block all tigers (no legal moves)
 
-### Board Layout
-```
- 0  -  1  -  2  -  3  -  4
- |  \\ | / \\ | / \\ | /  |
- 5  -  6  -  7  -  8  -  9
- |  / | \\ / | \\ / | \\  |
-10 - 11 - 12 - 13 - 14
- |  \\ | / \\ | / \\ | /  |
-15 - 16 - 17 - 18 - 19
- |  / | \\ / | \\ / | \\  |
-20 - 21 - 22 - 23 - 24
+## Development
+
+### Running Tests
+```bash
+pytest
 ```
 
-Initial tiger positions: 0, 4, 20, 24
+### Test UI
+Access the test UI at `http://localhost:8000/tests/static_test_ui.html` to test the gameplay and ELO system.
 
-## 🔧 Project Structure
-
-```
-backend/
-├── main.py                 # FastAPI application entry point
-├── core/
-│   ├── config.py          # Configuration settings
-│   ├── security.py        # JWT and password hashing
-│   ├── database.py        # Database connection
-│   └── redis_client.py    # Redis connection
-├── auth/
-│   ├── router.py          # Auth endpoints
-│   ├── models.py          # User model
-│   ├── schemas.py         # Pydantic schemas
-│   └── service.py         # Auth business logic
-├── matchmaking/
-│   ├── router.py          # Matchmaking endpoints
-│   └── service.py         # Queue management
-├── game/
-│   ├── router_ws.py       # WebSocket endpoint
-│   ├── logic.py           # Complete game rules
-│   ├── manager.py         # WebSocket connection manager
-│   └── schemas.py         # Game message schemas
-├── elo/
-│   └── service.py         # ELO rating calculations
-├── replay/
-│   ├── router.py          # Replay endpoints
-│   ├── models.py          # Replay model
-│   └── service.py         # Replay storage
-├── community/
-│   ├── router.py          # Community endpoints
-│   ├── models.py          # Post model
-│   └── schemas.py         # Post schemas
-├── alembic/                # Database migrations
-└── tests/
-    └── static_test_ui.html # Test interface
+### Database Migrations
+```bash
+alembic revision --autogenerate -m "description"
+alembic upgrade head
 ```
 
-## 🔒 Security
+## License
 
-- Passwords hashed with bcrypt
-- JWT tokens with configurable expiration
-- WebSocket authentication via query parameter tokens
-- CORS enabled for development (configure for production)
+MIT License
 
-## 📊 Database Schema
+## Contributing
 
-### Users Table
-- `id`: Primary key
-- `username`: Unique username
-- `hashed_password`: Bcrypt hashed password
-- `elo_rating`: Float (default 1200.0)
-- `created_at`: Timestamp
-
-### Replays Table
-- `id`: Primary key
-- `game_id`: Unique game identifier
-- `player1_id`, `player2_id`: Player IDs
-- `winner_id`: Winner's user ID
-- `moves`: JSON array of moves
-- `created_at`: Timestamp
-
-### Posts Table
-- `id`: Primary key
-- `user_id`: Author ID
-- `title`, `content`: Post data
-- `created_at`: Timestamp
-
-## 🚀 Production Deployment
-
-1. Update `.env` with production credentials
-2. Set strong `SECRET_KEY`
-3. Configure CORS for your frontend domain
-4. Use a production WSGI server (e.g., Gunicorn)
-5. Set up PostgreSQL and Redis with authentication
-6. Enable SSL/TLS for WebSocket connections
-7. Implement rate limiting and request validation
-
-## 📝 WebSocket Protocol
-
-### Client → Server
-
-**Place Goat (Phase 1):**
-```json
-{
-  "type": "place",
-  "position": 12
-}
-```
-
-**Move Piece:**
-```json
-{
-  "type": "move",
-  "from": 3,
-  "to": 8
-}
-```
-
-### Server → Client
-
-**Game Start:**
-```json
-{
-  "type": "start",
-  "board": [2,0,0,0,2,...],
-  "turn": "goat",
-  "phase": 1,
-  "role": "goat",
-  "goats_placed": 0,
-  "goats_captured": 0
-}
-```
-
-**Board Update:**
-```json
-{
-  "type": "update",
-  "board": [...],
-  "turn": "tiger",
-  "phase": 1,
-  "move": {...},
-  "goats_placed": 5,
-  "goats_captured": 0
-}
-```
-
-**Game Over:**
-```json
-{
-  "type": "game_over",
-  "winner": "tiger",
-  "reason": "tigers_captured_5_goats",
-  "final_board": [...]
-}
-```
-
-**Error:**
-```json
-{
-  "type": "error",
-  "message": "Illegal move"
-}
-```
-
-## 🐛 Troubleshooting
-
-**Cannot connect to PostgreSQL:**
-- Ensure PostgreSQL is running
-- Check credentials in `.env`
-- Create database: `createdb bagchal`
-
-**Cannot connect to Redis:**
-- Ensure Redis is running: `redis-server`
-- Check Redis URL in `.env`
-
-**WebSocket connection fails:**
-- Check that token is valid
-- Ensure matchId exists
-- Check CORS settings
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
-## 👥 Contributing
-
-Contributions welcome! Please open an issue or submit a pull request.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
