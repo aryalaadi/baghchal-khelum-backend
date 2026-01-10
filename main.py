@@ -5,11 +5,13 @@ from contextlib import asynccontextmanager
 from app.core.redis import get_redis, close_redis
 from app.api.v1.router import api_router
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_redis()
     yield
     await close_redis()
+
 
 app = FastAPI(title="BaghChal Multiplayer Backend", lifespan=lifespan)
 
@@ -28,6 +30,7 @@ try:
 except:
     pass
 
+
 @app.get("/")
 def root():
     return {
@@ -39,14 +42,17 @@ def root():
             "game": "/ws/game",
             "replay": "/replay",
             "community": "/community",
-            "test_ui": "/tests/static_test_ui.html"
-        }
+            "test_ui": "/tests/static_test_ui.html",
+        },
     }
+
 
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
