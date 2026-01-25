@@ -17,7 +17,7 @@ app = FastAPI(title="BaghChal Multiplayer Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://schizoid.men"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
