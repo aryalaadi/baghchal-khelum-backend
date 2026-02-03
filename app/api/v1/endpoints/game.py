@@ -125,6 +125,67 @@ async def game_websocket(
                             move_info = {"type": "move", "from": from_pos, "to": to_pos}
                     else:
                         error_msg = "From and to positions required"
+                elif move_type == "leave":
+                    # Player is leaving the game - opponent wins by forfeit
+                    opponent_role = "goat" if role == "tiger" else "tiger"
+                    p1_id = int(decode_redis_value(match_data.get("p1")))
+                    p2_id = int(decode_redis_value(match_data.get("p2")))
+                    
+                    # Determine winner (opponent of the player who left)
+                    winner_id = p2_id if user_id == p1_id else p1_id
+                    loser_id = user_id
+                    
+                    # Notify both players
+                    await manager.broadcast_to_match(
+                        matchId,
+                        {
+                            "type": "game_over",
+                            "winner": opponent_role,
+                            "reason": "opponent_left",
+                            "message": f"{role.capitalize()} player left the game",
+                            "final_board": game.board,
+                        },
+                    )
+                    
+                    # Update ELO and log game
+                    tiger_player_id = p2_id
+                    goat_player_id = p1_id
+                    
+                    tiger = db.query(User).filter(User.id == tiger_player_id).first()
+                    goat = db.query(User).filter(User.id == goat_player_id).first()
+                    tiger_elo_before = tiger.elo_rating if tiger else 1200.0
+                    goat_elo_before = goat.elo_rating if goat else 1200.0
+                    
+                    await update_elo_ratings(db, winner_id, loser_id)
+                    
+                    db.refresh(tiger)
+                    db.refresh(goat)
+                    tiger_elo_after = tiger.elo_rating
+                    goat_elo_after = goat.elo_rating
+                    
+                    result = "tiger_win" if opponent_role == "tiger" else "goat_win"
+                    
+                    log_game(
+                        db=db,
+                        match_id=matchId,
+                        tiger_player_id=tiger_player_id,
+                        goat_player_id=goat_player_id,
+                        winner_id=winner_id,
+                        result=result,
+                        goats_captured=game.goats_captured,
+                        total_moves=len(game.move_history) if hasattr(game, 'move_history') else 0,
+                        game_duration_seconds=None,
+                        tiger_elo_before=tiger_elo_before,
+                        tiger_elo_after=tiger_elo_after,
+                        goat_elo_before=goat_elo_before,
+                        goat_elo_after=goat_elo_after,
+                        moves_history={"moves": game.move_history} if hasattr(game, 'move_history') else None
+                    )
+                    
+                    await save_replay(db, matchId, p1_id, p2_id, winner_id, [])
+                    from app.services.matchmaking_service import cleanup_match
+                    await cleanup_match(matchId)
+                    break
                 if not success:
                     await manager.send_to_connection(
                         websocket, {"type": "error", "message": error_msg}
