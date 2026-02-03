@@ -1,0 +1,53 @@
+BaghChal API Endpoints
+======================
+
+Base URL: /api/v1
+
+AUTH (/api/v1/auth)
+-------------------
+POST   /api/v1/auth/register
+POST   /api/v1/auth/login
+
+USERS (/api/v1/users)
+---------------------
+GET    /api/v1/users/all
+GET    /api/v1/users/{user_id}
+GET    /api/v1/users/{user_id}/stats
+GET    /api/v1/users/{user_id}/games
+
+MATCHMAKING (/api/v1/matchmaking)
+---------------------------------
+POST   /api/v1/matchmaking/start
+POST   /api/v1/matchmaking/cancel
+POST   /api/v1/matchmaking/heartbeat
+GET    /api/v1/matchmaking/status
+POST   /api/v1/matchmaking/leave
+
+FRIENDS (/api/v1/friends)
+-------------------------
+POST   /api/v1/friends/add
+DELETE /api/v1/friends/{friend_id}
+GET    /api/v1/friends/
+POST   /api/v1/friends/challenge
+GET    /api/v1/friends/challenges
+POST   /api/v1/friends/challenge/respond
+
+COMMUNITY (/api/v1/community)
+-----------------------------
+POST   /api/v1/community/post
+GET    /api/v1/community/feed
+GET    /api/v1/community/leaderboard
+
+REPLAY (/api/v1/replay)
+-----------------------
+GET    /api/v1/replay/{game_id}
+GET    /api/v1/replay/user/{user_id}
+
+GAME (WebSocket)
+----------------
+WS     /api/v1/ws/game
+
+OTHER
+-----
+GET    /           (API info)
+GET    /health     (Health check)
