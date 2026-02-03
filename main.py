@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.core.redis import get_redis, close_redis
+from app.core.config import settings
 from app.api.v1.router import api_router
 
 
@@ -13,7 +14,14 @@ async def lifespan(app: FastAPI):
     await close_redis()
 
 
-app = FastAPI(title="BaghChal Multiplayer Backend", lifespan=lifespan)
+# Disable Swagger/OpenAPI docs in production
+app = FastAPI(
+    title="BaghChal Multiplayer Backend",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
