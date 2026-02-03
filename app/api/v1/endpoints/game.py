@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.services.auth_service import get_user_by_id
 from app.services.elo_service import update_elo_ratings
 from app.services.replay_service import save_replay
+from app.services.game_log_service import log_game
+from app.db.models.user import User
 import json
 
 router = APIRouter()
@@ -147,9 +149,50 @@ async def game_websocket(
                     )
                     p1_id = int(decode_redis_value(match_data.get("p1")))
                     p2_id = int(decode_redis_value(match_data.get("p2")))
+                    
+                    # Determine tiger and goat players
+                    tiger_player_id = p2_id  # p2 is tiger
+                    goat_player_id = p1_id   # p1 is goat
+                    
                     winner_id = p1_id if winner == "goat" else p2_id
                     loser_id = p2_id if winner == "goat" else p1_id
-                    await update_elo_ratings(db, winner_id, loser_id)
+                    
+                    # Get ELO ratings before update
+                    tiger = db.query(User).filter(User.id == tiger_player_id).first()
+                    goat = db.query(User).filter(User.id == goat_player_id).first()
+                    tiger_elo_before = tiger.elo_rating if tiger else 1200.0
+                    goat_elo_before = goat.elo_rating if goat else 1200.0
+                    
+                    # Update ELO ratings
+                    elo_result = await update_elo_ratings(db, winner_id, loser_id)
+                    
+                    # Get ELO ratings after update
+                    db.refresh(tiger)
+                    db.refresh(goat)
+                    tiger_elo_after = tiger.elo_rating
+                    goat_elo_after = goat.elo_rating
+                    
+                    # Determine result string
+                    result = "tiger_win" if winner == "tiger" else "goat_win"
+                    
+                    # Log the game
+                    log_game(
+                        db=db,
+                        match_id=matchId,
+                        tiger_player_id=tiger_player_id,
+                        goat_player_id=goat_player_id,
+                        winner_id=winner_id,
+                        result=result,
+                        goats_captured=game.goats_captured,
+                        total_moves=len(game.move_history) if hasattr(game, 'move_history') else 0,
+                        game_duration_seconds=None,  # Can be calculated if needed
+                        tiger_elo_before=tiger_elo_before,
+                        tiger_elo_after=tiger_elo_after,
+                        goat_elo_before=goat_elo_before,
+                        goat_elo_after=goat_elo_after,
+                        moves_history={"moves": game.move_history} if hasattr(game, 'move_history') else None
+                    )
+                    
                     moves = []  # Track moves in production
                     await save_replay(db, matchId, p1_id, p2_id, winner_id, moves)
                     from app.services.matchmaking_service import cleanup_match

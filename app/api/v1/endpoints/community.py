@@ -51,19 +51,24 @@ def get_feed(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
 
 @router.get("/leaderboard")
 def get_leaderboard(db: Session = Depends(get_db)):
-    """Get all users with their ELO ratings."""
+    """Get top 10 users with their ELO ratings and stats."""
     from app.db.models.user import User
 
-    users = db.query(User).order_by(User.elo_rating.desc()).all()
-    return {
-        "users": [
-            {
-                "id": user.id,
-                "user_id": user.id,
-                "username": user.username,
-                "elo": user.elo_rating,
-                "rating": user.elo_rating,
-            }
-            for user in users
-        ]
-    }
+    users = db.query(User).order_by(User.elo_rating.desc()).limit(10).all()
+    leaderboard = []
+    
+    for rank, user in enumerate(users, start=1):
+        win_rate = (user.games_won / user.games_played * 100) if user.games_played > 0 else 0.0
+        leaderboard.append({
+            "rank": rank,
+            "id": user.id,
+            "user_id": user.id,
+            "username": user.username,
+            "elo": user.elo_rating,
+            "rating": user.elo_rating,
+            "games_played": user.games_played,
+            "games_won": user.games_won,
+            "win_rate": round(win_rate, 2)
+        })
+    
+    return {"users": leaderboard}

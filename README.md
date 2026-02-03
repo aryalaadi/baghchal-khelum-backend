@@ -2,11 +2,19 @@
 
 A real-time multiplayer backend implementation for the traditional Nepalese board game BaghChal (Tigers and Goats). Built with FastAPI, PostgreSQL, Redis, and WebSocket support.
 
+## 📚 Documentation
+
+**For detailed API documentation, see [API_DOCUMENTATION.md](API_DOCUMENTATION.md)**
+
 ## Features
 
 - Real-time multiplayer gameplay via WebSocket
 - ELO rating system for competitive matchmaking
 - User authentication and authorization
+- **User profiles with comprehensive game statistics**
+- **Friend system with challenge functionality**
+- **Game history and logs tracking**
+- **Top 10 leaderboard with detailed stats**
 - Game replay system
 - Community features (posts and leaderboard)
 - Docker containerization for easy deployment
@@ -112,16 +120,38 @@ SECRET_KEY=your-secret-key-here
 alembic upgrade head
 ```
 
+**Note:** The latest migration (002) adds:
+- User game statistics tracking
+- Friends relationship table
+- Game logs for detailed match history
+- Friend challenges system
+
 6. Start the server
 ```bash
 uvicorn main:app --reload
 ```
 
-## API Endpoints
+## Quick API Overview
+
+For complete API documentation with request/response examples, see **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)**
 
 ### Authentication
 - `POST /auth/register` - Register a new user
 - `POST /auth/login` - Login and get access token
+
+### User Profiles & Stats (NEW)
+- `GET /users/all` - Get all users with pagination
+- `GET /users/{user_id}` - Get detailed user profile with stats
+- `GET /users/{user_id}/stats` - Get user game statistics
+- `GET /users/{user_id}/games` - Get user's game history
+
+### Friends & Challenges (NEW)
+- `POST /friends/add` - Add a friend
+- `DELETE /friends/{friend_id}` - Remove a friend
+- `GET /friends/` - Get friends list
+- `POST /friends/challenge` - Challenge a friend to a game
+- `GET /friends/challenges` - Get pending challenges
+- `POST /friends/challenge/respond` - Accept or decline a challenge
 
 ### Matchmaking
 - `POST /matchmaking/start` - Start matchmaking
@@ -138,7 +168,7 @@ uvicorn main:app --reload
 ### Community
 - `POST /community/post` - Create a community post
 - `GET /community/feed` - Get community feed
-- `GET /community/leaderboard` - Get user leaderboard with ELO ratings
+- `GET /community/leaderboard` - Get top 10 players with stats (UPDATED)
 
 ## Game Rules
 

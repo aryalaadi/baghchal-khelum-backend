@@ -20,6 +20,8 @@ class UserProfile(BaseModel):
     id: int
     username: str
     elo_rating: float
+    games_played: int = 0
+    games_won: int = 0
 
     class Config:
         from_attributes = True
