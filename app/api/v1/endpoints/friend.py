@@ -72,7 +72,7 @@ def get_challenges(
 
 
 @router.post("/challenge/respond")
-def respond_to_challenge(
+async def respond_to_challenge(
     action_data: ChallengeAction,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -85,7 +85,7 @@ def respond_to_challenge(
         )
     
     accept = action_data.action == "accept"
-    match_id = friend_service.respond_to_challenge(
+    match_id = await friend_service.respond_to_challenge(
         db, action_data.challenge_id, current_user.id, accept
     )
     
@@ -93,6 +93,7 @@ def respond_to_challenge(
         return {
             "message": "Challenge accepted",
             "match_id": match_id,
+            "role": "tiger",
             "action": "accepted"
         }
     else:

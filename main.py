@@ -31,6 +31,9 @@ origins = [
     "https://baghchal.schizoid.men",
     "http://localhost:3000",
     "http://localhost:5173",
+    "http://localhost:19000",
+    "http://localhost:19006",
+    "http://localhost:8081",
 ]
 
 app.add_middleware(

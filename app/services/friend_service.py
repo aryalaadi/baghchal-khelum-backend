@@ -4,6 +4,8 @@ from app.db.models.user import User
 from app.db.models.friend_challenge import FriendChallenge, ChallengeStatus
 from fastapi import HTTPException, status
 import uuid
+import time
+from app.core.redis import get_redis
 
 
 def add_friend(db: Session, user_id: int, friend_id: int) -> bool:
@@ -126,7 +128,7 @@ def get_pending_challenges(db: Session, user_id: int) -> List[FriendChallenge]:
     return challenges
 
 
-def respond_to_challenge(
+async def respond_to_challenge(
     db: Session, challenge_id: int, user_id: int, accept: bool
 ) -> Optional[str]:
     """Respond to a challenge (accept or decline). Returns match_id if accepted."""
@@ -156,6 +158,22 @@ def respond_to_challenge(
         challenge.status = ChallengeStatus.ACCEPTED
         challenge.match_id = match_id
         db.commit()
+
+        redis = await get_redis()
+        challenger_id_str = str(challenge.challenger_id)
+        challenged_id_str = str(challenge.challenged_id)
+
+        match_data = {
+            "p1": challenger_id_str,
+            "p2": challenged_id_str,
+            "status": "active",
+            "created_at": int(time.time()),
+        }
+        await redis.hset(f"match:{match_id}", mapping=match_data)
+        await redis.expire(f"match:{match_id}", 3600)
+        await redis.set(f"user_match:{challenger_id_str}", match_id, ex=3600)
+        await redis.set(f"user_match:{challenged_id_str}", match_id, ex=3600)
+
         return match_id
     else:
         challenge.status = ChallengeStatus.DECLINED

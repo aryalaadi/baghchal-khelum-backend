@@ -1,33 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.core.security import decode_access_token
-from app.services.auth_service import get_user_by_id
+from fastapi import APIRouter, Depends
 from app.services.matchmaking_service import add_to_queue, remove_from_queue
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.api.deps import get_current_user_id
 
 router = APIRouter(prefix="/matchmaking", tags=["matchmaking"])
-security = HTTPBearer()
-
-
-def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-) -> int:
-    token = credentials.credentials
-    payload = decode_access_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-        )
-    user_id = int(payload.get("sub"))
-    user = get_user_by_id(db, user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
-        )
-    return user_id
 
 
 @router.post("/start")
