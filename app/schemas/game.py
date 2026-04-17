@@ -46,3 +46,24 @@ class GameOver(BaseModel):
 class ErrorMessage(BaseModel):
     type: str = "error"
     message: str
+
+
+class AIMoveRequest(BaseModel):
+    board: List[int]
+    turn: str
+    phase: int
+    goats_placed: int
+    goats_captured: int
+    ai_role: Optional[str] = None
+    mode: str = "hybrid"
+    top_k: int = 3
+
+
+class AIMoveResponse(BaseModel):
+    move_type: str
+    role: str
+    position: Optional[int] = None
+    from_pos: Optional[int] = None
+    to_pos: Optional[int] = None
+    mode_used: str
+    score: float

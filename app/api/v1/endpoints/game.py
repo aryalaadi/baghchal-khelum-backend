@@ -1,8 +1,11 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.services.game.connection_manager import manager
 from app.core.security import decode_access_token
 from app.db.session import get_db
+from app.api.deps import get_current_user_id
+from app.schemas.game import AIMoveRequest, AIMoveResponse
+from app.services.game.ai_service import hybrid_ai_service
 from app.services.auth_service import get_user_by_id
 from app.services.elo_service import update_elo_ratings
 from app.services.replay_service import save_replay
@@ -11,6 +14,42 @@ from app.db.models.user import User
 import json
 
 router = APIRouter()
+
+
+@router.post("/game/ai/move", response_model=AIMoveResponse)
+async def get_ai_move(
+    payload: AIMoveRequest, _user_id: int = Depends(get_current_user_id)
+):
+    if len(payload.board) != 25:
+        raise HTTPException(status_code=400, detail="Board must have exactly 25 cells")
+    if payload.turn not in {"goat", "tiger"}:
+        raise HTTPException(status_code=400, detail="Invalid turn value")
+    if payload.phase not in {1, 2}:
+        raise HTTPException(status_code=400, detail="Invalid phase value")
+
+    move, mode_used, score = hybrid_ai_service.choose_move(
+        board=payload.board,
+        turn=payload.turn,
+        phase=payload.phase,
+        goats_placed=payload.goats_placed,
+        goats_captured=payload.goats_captured,
+        ai_role=payload.ai_role,
+        mode=payload.mode,
+        top_k=payload.top_k,
+    )
+    if move is None:
+        raise HTTPException(status_code=400, detail="No legal AI move available")
+
+    move_type = move["type"]
+    return AIMoveResponse(
+        move_type=move_type,
+        role=payload.ai_role or payload.turn,
+        position=move.get("position"),
+        from_pos=move.get("from"),
+        to_pos=move.get("to"),
+        mode_used=mode_used,
+        score=score,
+    )
 
 
 async def verify_websocket_token(token: str, db: Session) -> int:

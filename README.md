@@ -160,6 +160,7 @@ For complete API documentation with request/response examples, see **[API_DOCUME
 
 ### Game
 - `WS /ws/game` - WebSocket connection for real-time gameplay
+- `POST /game/ai/move` - Get AI move for local Play with AI mode
 
 ### Replay
 - `GET /replay/{match_id}` - Get game replay data
