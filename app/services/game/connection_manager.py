@@ -1,4 +1,5 @@
 import json
+import asyncio
 from typing import Dict, Set
 from fastapi import WebSocket
 from app.services.game.game_service import BaghChalGame
@@ -10,6 +11,71 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         self.games: Dict[str, BaghChalGame] = {}
         self.connection_info: Dict[WebSocket, tuple] = {}
+        self.pubsub = None
+        self.pubsub_reader_task = None
+        self.subscribed_matches: Set[str] = set()
+
+    async def _ensure_pubsub(self):
+        if self.pubsub is None:
+            redis = await get_redis()
+            self.pubsub = redis.pubsub()
+        if self.pubsub_reader_task is None or self.pubsub_reader_task.done():
+            self.pubsub_reader_task = asyncio.create_task(self._pubsub_reader())
+
+    async def _subscribe_match_channel(self, match_id: str):
+        await self._ensure_pubsub()
+        if match_id in self.subscribed_matches:
+            return
+        channel = f"match_events:{match_id}"
+        await self.pubsub.subscribe(channel)
+        self.subscribed_matches.add(match_id)
+
+    async def _unsubscribe_match_channel(self, match_id: str):
+        if self.pubsub is None or match_id not in self.subscribed_matches:
+            return
+        channel = f"match_events:{match_id}"
+        await self.pubsub.unsubscribe(channel)
+        self.subscribed_matches.discard(match_id)
+
+    async def _pubsub_reader(self):
+        try:
+            async for raw_message in self.pubsub.listen():
+                msg_type = raw_message.get("type")
+                if msg_type != "message":
+                    continue
+
+                channel = raw_message.get("channel")
+                if isinstance(channel, bytes):
+                    channel = channel.decode("utf-8")
+                if not channel or not channel.startswith("match_events:"):
+                    continue
+
+                match_id = channel.split("match_events:", 1)[1]
+                payload = raw_message.get("data")
+                if isinstance(payload, bytes):
+                    payload = payload.decode("utf-8")
+                if not payload:
+                    continue
+
+                try:
+                    message = json.loads(payload)
+                except Exception:
+                    continue
+
+                await self._broadcast_local(match_id, message)
+        except Exception as e:
+            print(f"PubSub reader stopped: {e}")
+
+    async def _broadcast_local(self, match_id: str, message: dict):
+        if match_id not in self.active_connections:
+            return
+        connections = list(self.active_connections[match_id])
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"Error local-broadcasting to connection: {e}")
+                await self.disconnect(connection)
 
     async def connect(self, websocket: WebSocket, match_id: str, user_id: int):
         """Connect a websocket to a match room."""
@@ -17,6 +83,7 @@ class ConnectionManager:
             self.active_connections[match_id] = set()
         self.active_connections[match_id].add(websocket)
         self.connection_info[websocket] = (match_id, user_id)
+        await self._subscribe_match_channel(match_id)
         if match_id not in self.games:
             await self.load_game(match_id)
 
@@ -28,6 +95,7 @@ class ConnectionManager:
                 self.active_connections[match_id].discard(websocket)
                 if len(self.active_connections[match_id]) == 0:
                     del self.active_connections[match_id]
+                    await self._unsubscribe_match_channel(match_id)
                     if match_id in self.games:
                         await self.save_game(match_id)
                         del self.games[match_id]
@@ -86,14 +154,8 @@ class ConnectionManager:
 
     async def broadcast_to_match(self, match_id: str, message: dict):
         """Broadcast message to all connections in a match."""
-        if match_id in self.active_connections:
-            connections = list(self.active_connections[match_id])
-            for connection in connections:
-                try:
-                    await connection.send_json(message)
-                except Exception as e:
-                    print(f"Error broadcasting to connection: {e}")
-                    await self.disconnect(connection)
+        redis = await get_redis()
+        await redis.publish(f"match_events:{match_id}", json.dumps(message))
 
     async def send_to_connection(self, websocket: WebSocket, message: dict):
         """Send message to specific connection."""

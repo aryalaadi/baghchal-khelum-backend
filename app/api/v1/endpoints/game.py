@@ -224,6 +224,10 @@ async def game_websocket(
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 move_type = message.get("type")
+
+                await manager.load_game(matchId)
+                game = manager.get_game(matchId)
+
                 if move_type == "ping":
                     await manager.send_to_connection(websocket, {"type": "pong"})
                     continue
