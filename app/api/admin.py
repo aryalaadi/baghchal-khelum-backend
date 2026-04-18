@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, delete
+import html
 from app.core.config import settings
+from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.db.models.user import User
+from app.db.models.user import friends_association
 from app.db.models.game_log import GameLog
 from app.db.models.replay import Replay
 from app.db.models.friend_challenge import FriendChallenge
+from app.db.models.community import Post
+from app.db.models.password_reset_code import PasswordResetCode
+from app.services.auth_service import is_valid_email, validate_password_strength
 
 router = APIRouter(tags=["admin"])
 
@@ -14,6 +21,68 @@ router = APIRouter(tags=["admin"])
 def _is_admin_authenticated(request: Request) -> bool:
     cookie_value = request.cookies.get("admin_auth")
     return bool(cookie_value and cookie_value == settings.ADMIN_PANEL_SECRET)
+
+
+def _admin_page_wrapper(title: str, body_html: str) -> HTMLResponse:
+    return HTMLResponse(
+        f"""
+        <html>
+          <head>
+            <title>{title}</title>
+            <style>
+              :root {{
+                --bg: #0f172a;
+                --panel: #111827;
+                --panel-2: #1f2937;
+                --text: #e5e7eb;
+                --muted: #9ca3af;
+                --accent: #22c55e;
+                --danger: #ef4444;
+                --border: #374151;
+              }}
+              * {{ box-sizing: border-box; }}
+              body {{ margin: 0; font-family: Inter, system-ui, Arial, sans-serif; background: var(--bg); color: var(--text); }}
+              .container {{ max-width: 1240px; margin: 24px auto; padding: 0 16px; }}
+              .topbar {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }}
+              .nav a {{ color: var(--text); text-decoration: none; margin-right: 12px; font-size: 14px; }}
+              .card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }}
+              .grid {{ display: grid; gap: 12px; }}
+              .stats {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
+              .small {{ color: var(--muted); font-size: 12px; }}
+              input, select {{ width: 100%; background: #0b1220; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px; }}
+              button {{ border: none; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #fff; background: #2563eb; }}
+              button.secondary {{ background: #374151; }}
+              button.success {{ background: var(--accent); color: #08120b; font-weight: 600; }}
+              button.danger {{ background: var(--danger); }}
+              table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+              th, td {{ border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: top; }}
+              th {{ color: var(--muted); font-weight: 600; }}
+              .row {{ display: flex; gap: 8px; align-items: center; }}
+              .row > * {{ flex: 1; }}
+              .mt {{ margin-top: 12px; }}
+              .message {{ margin: 10px 0; padding: 10px; border-radius: 8px; background: #052e1d; border: 1px solid #065f46; }}
+              .error {{ background: #3f0f14; border-color: #7f1d1d; }}
+              @media (max-width: 980px) {{ .stats {{ grid-template-columns: 1fr 1fr; }} }}
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="topbar">
+                <div>
+                  <h2 style="margin:0 0 6px 0;">Baghchal Admin</h2>
+                  <div class="nav">
+                    <a href="/admin/dashboard">Dashboard</a>
+                    <a href="/admin/users">Users</a>
+                    <a href="/admin/logout">Logout</a>
+                  </div>
+                </div>
+              </div>
+              {body_html}
+            </div>
+          </body>
+        </html>
+        """
+    )
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -83,33 +152,313 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
         for g in latest_games
     )
 
-    html = f"""
-    <html>
-      <head><title>Admin Dashboard</title></head>
-      <body style='font-family: Arial; max-width: 1100px; margin: 30px auto;'>
-        <div style='display:flex; justify-content:space-between; align-items:center;'>
-          <h2>Baghchal Admin Dashboard</h2>
-          <a href='/admin/logout'>Logout</a>
-        </div>
-        <div style='display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0;'>
-          <div style='padding:12px;border:1px solid #ddd;'>Users: <b>{users_count}</b></div>
-          <div style='padding:12px;border:1px solid #ddd;'>Game Logs: <b>{game_logs_count}</b></div>
-          <div style='padding:12px;border:1px solid #ddd;'>Replays: <b>{replays_count}</b></div>
-          <div style='padding:12px;border:1px solid #ddd;'>Challenges: <b>{challenges_count}</b></div>
+    return _admin_page_wrapper(
+        "Admin Dashboard",
+        f"""
+        <div class='grid stats'>
+          <div class='card'><div class='small'>Users</div><div style='font-size:26px;font-weight:700'>{users_count}</div></div>
+          <div class='card'><div class='small'>Game Logs</div><div style='font-size:26px;font-weight:700'>{game_logs_count}</div></div>
+          <div class='card'><div class='small'>Replays</div><div style='font-size:26px;font-weight:700'>{replays_count}</div></div>
+          <div class='card'><div class='small'>Challenges</div><div style='font-size:26px;font-weight:700'>{challenges_count}</div></div>
         </div>
 
-        <h3>Latest Users</h3>
-        <table border='1' cellpadding='8' cellspacing='0' width='100%'>
-          <tr><th>ID</th><th>Username</th><th>Email</th><th>ELO</th></tr>
-          {users_rows}
-        </table>
+        <div class='card mt'>
+          <div class='row' style='justify-content:space-between'>
+            <h3 style='margin:0'>Latest Users</h3>
+            <a href='/admin/users' style='color:#93c5fd'>Manage users →</a>
+          </div>
+          <table>
+            <tr><th>ID</th><th>Username</th><th>Email</th><th>ELO</th></tr>
+            {users_rows}
+          </table>
+        </div>
 
-        <h3 style='margin-top:24px;'>Latest Games</h3>
-        <table border='1' cellpadding='8' cellspacing='0' width='100%'>
-          <tr><th>ID</th><th>Match ID</th><th>Result</th><th>Total Moves</th></tr>
-          {games_rows}
-        </table>
-      </body>
-    </html>
-    """
-    return HTMLResponse(html)
+        <div class='card mt'>
+          <h3 style='margin-top:0'>Latest Games</h3>
+          <table>
+            <tr><th>ID</th><th>Match ID</th><th>Result</th><th>Total Moves</th></tr>
+            {games_rows}
+          </table>
+        </div>
+        """,
+    )
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+def admin_users(
+    request: Request,
+    q: str = "",
+    min_elo: float | None = None,
+    max_elo: float | None = None,
+    sort_by: str = "id",
+    sort_order: str = "desc",
+    db: Session = Depends(get_db),
+):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/admin", status_code=302)
+
+    query = db.query(User)
+
+    if q:
+        filters = [
+            User.username.ilike(f"%{q}%"),
+            User.email.ilike(f"%{q}%"),
+        ]
+        if q.isdigit():
+            filters.append(User.id == int(q))
+        query = query.filter(or_(*filters))
+
+    if min_elo is not None:
+        query = query.filter(User.elo_rating >= min_elo)
+    if max_elo is not None:
+        query = query.filter(User.elo_rating <= max_elo)
+
+    sort_column_map = {
+        "id": User.id,
+        "username": User.username,
+        "email": User.email,
+        "elo": User.elo_rating,
+        "created": User.created_at,
+        "games": User.games_played,
+    }
+    sort_column = sort_column_map.get(sort_by, User.id)
+    if sort_order == "asc":
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+
+    users = query.limit(200).all()
+
+    msg = request.query_params.get("msg")
+    err = request.query_params.get("err")
+    msg_html = f"<div class='message'>{html.escape(msg)}</div>" if msg else ""
+    err_html = f"<div class='message error'>{html.escape(err)}</div>" if err else ""
+
+    q_safe = html.escape(q)
+    sort_by_safe = html.escape(sort_by)
+    sort_order_safe = html.escape(sort_order)
+
+    user_rows = []
+    for user in users:
+        user_rows.append(
+            f"""
+            <tr>
+              <td>{user.id}</td>
+              <td colspan='10'>
+                <form method='post' action='/admin/users/{user.id}/update'>
+                  <div class='row'>
+                    <input name='username' value='{html.escape(user.username)}' placeholder='username' required />
+                    <input name='email' value='{html.escape(user.email or "")}' placeholder='email' required />
+                    <input type='number' step='0.1' name='elo_rating' value='{user.elo_rating}' placeholder='ELO' required />
+                    <input type='number' name='games_played' value='{user.games_played}' placeholder='Played' required />
+                    <input type='number' name='games_won' value='{user.games_won}' placeholder='Won' required />
+                    <input type='number' name='games_lost' value='{user.games_lost}' placeholder='Lost' required />
+                    <input type='number' name='games_drawn' value='{user.games_drawn}' placeholder='Drawn' required />
+                    <input type='number' name='goats_captured_total' value='{user.goats_captured_total}' placeholder='Goats cap.' required />
+                    <input name='new_password' type='password' placeholder='New password (optional)' />
+                  </div>
+                  <div class='row mt'>
+                    <button class='success' type='submit'>Save User #{user.id}</button>
+                  </div>
+                </form>
+                <form method='post' action='/admin/users/{user.id}/delete' class='mt' onsubmit='return confirm("Delete user #{user.id} and all related records?")'>
+                  <button class='danger' type='submit'>Delete Account</button>
+                </form>
+              </td>
+            </tr>
+            """
+        )
+
+    users_html = "".join(user_rows) if user_rows else "<tr><td colspan='11'>No users found.</td></tr>"
+
+    return _admin_page_wrapper(
+        "Admin Users",
+        f"""
+        {msg_html}
+        {err_html}
+
+        <div class='card'>
+          <h3 style='margin-top:0'>Search & Filters</h3>
+          <form method='get' action='/admin/users'>
+            <div class='row'>
+              <input name='q' value='{q_safe}' placeholder='Search by username, email, or ID' />
+              <input type='number' step='0.1' name='min_elo' placeholder='Min ELO' value='{'' if min_elo is None else min_elo}' />
+              <input type='number' step='0.1' name='max_elo' placeholder='Max ELO' value='{'' if max_elo is None else max_elo}' />
+              <select name='sort_by'>
+                <option value='id' {'selected' if sort_by_safe == 'id' else ''}>ID</option>
+                <option value='username' {'selected' if sort_by_safe == 'username' else ''}>Username</option>
+                <option value='email' {'selected' if sort_by_safe == 'email' else ''}>Email</option>
+                <option value='elo' {'selected' if sort_by_safe == 'elo' else ''}>ELO</option>
+                <option value='created' {'selected' if sort_by_safe == 'created' else ''}>Created</option>
+                <option value='games' {'selected' if sort_by_safe == 'games' else ''}>Games Played</option>
+              </select>
+              <select name='sort_order'>
+                <option value='desc' {'selected' if sort_order_safe == 'desc' else ''}>Desc</option>
+                <option value='asc' {'selected' if sort_order_safe == 'asc' else ''}>Asc</option>
+              </select>
+              <button type='submit'>Apply</button>
+            </div>
+          </form>
+        </div>
+
+        <div class='card mt'>
+          <h3 style='margin-top:0'>Create User</h3>
+          <form method='post' action='/admin/users/create'>
+            <div class='row'>
+              <input name='username' placeholder='username' required />
+              <input name='email' placeholder='email' required />
+              <input name='password' type='password' placeholder='password' required />
+              <input type='number' step='0.1' name='elo_rating' value='1200' placeholder='ELO' required />
+              <button class='success' type='submit'>Create</button>
+            </div>
+          </form>
+        </div>
+
+        <div class='card mt'>
+          <h3 style='margin-top:0'>User CRUD (max 200 records)</h3>
+          <table>
+            <tr><th>ID</th><th>User Data</th></tr>
+            {users_html}
+          </table>
+        </div>
+        """,
+    )
+
+
+@router.post("/admin/users/create")
+def admin_create_user(
+    request: Request,
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    elo_rating: float = Form(1200.0),
+    db: Session = Depends(get_db),
+):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/admin", status_code=302)
+
+    username = username.strip()
+    email = email.strip().lower()
+
+    if not username:
+        return RedirectResponse(url="/admin/users?err=Username+is+required", status_code=302)
+    if not is_valid_email(email):
+        return RedirectResponse(url="/admin/users?err=Invalid+email", status_code=302)
+    if db.query(User).filter(User.username == username).first():
+        return RedirectResponse(url="/admin/users?err=Username+already+exists", status_code=302)
+    if db.query(User).filter(User.email == email).first():
+        return RedirectResponse(url="/admin/users?err=Email+already+exists", status_code=302)
+
+    password_error = validate_password_strength(password)
+    if password_error:
+        return RedirectResponse(url=f"/admin/users?err={password_error.replace(' ', '+')}", status_code=302)
+
+    user = User(
+        username=username,
+        email=email,
+        hashed_password=get_password_hash(password),
+        elo_rating=elo_rating,
+    )
+    db.add(user)
+    db.commit()
+    return RedirectResponse(url="/admin/users?msg=User+created+successfully", status_code=302)
+
+
+@router.post("/admin/users/{user_id}/update")
+def admin_update_user(
+    user_id: int,
+    request: Request,
+    username: str = Form(...),
+    email: str = Form(...),
+    elo_rating: float = Form(...),
+    games_played: int = Form(...),
+    games_won: int = Form(...),
+    games_lost: int = Form(...),
+    games_drawn: int = Form(...),
+    goats_captured_total: int = Form(...),
+    new_password: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/admin", status_code=302)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return RedirectResponse(url="/admin/users?err=User+not+found", status_code=302)
+
+    username = username.strip()
+    email = email.strip().lower()
+    if not username:
+        return RedirectResponse(url="/admin/users?err=Username+is+required", status_code=302)
+    if not is_valid_email(email):
+        return RedirectResponse(url="/admin/users?err=Invalid+email", status_code=302)
+
+    username_taken = db.query(User).filter(User.username == username, User.id != user_id).first()
+    if username_taken:
+        return RedirectResponse(url="/admin/users?err=Username+already+exists", status_code=302)
+
+    email_taken = db.query(User).filter(User.email == email, User.id != user_id).first()
+    if email_taken:
+        return RedirectResponse(url="/admin/users?err=Email+already+exists", status_code=302)
+
+    if new_password.strip():
+        password_error = validate_password_strength(new_password.strip())
+        if password_error:
+            return RedirectResponse(url=f"/admin/users?err={password_error.replace(' ', '+')}", status_code=302)
+        user.hashed_password = get_password_hash(new_password.strip())
+
+    user.username = username
+    user.email = email
+    user.elo_rating = elo_rating
+    user.games_played = max(0, games_played)
+    user.games_won = max(0, games_won)
+    user.games_lost = max(0, games_lost)
+    user.games_drawn = max(0, games_drawn)
+    user.goats_captured_total = max(0, goats_captured_total)
+
+    db.commit()
+    return RedirectResponse(url="/admin/users?msg=User+updated+successfully", status_code=302)
+
+
+@router.post("/admin/users/{user_id}/delete")
+def admin_delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/admin", status_code=302)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return RedirectResponse(url="/admin/users?err=User+not+found", status_code=302)
+
+    db.query(GameLog).filter(
+        or_(
+            GameLog.tiger_player_id == user_id,
+            GameLog.goat_player_id == user_id,
+            GameLog.winner_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    db.query(Replay).filter(
+        or_(
+            Replay.player1_id == user_id,
+            Replay.player2_id == user_id,
+            Replay.winner_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    db.query(FriendChallenge).filter(
+        or_(
+            FriendChallenge.challenger_id == user_id,
+            FriendChallenge.challenged_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+
+    db.query(Post).filter(Post.user_id == user_id).delete(synchronize_session=False)
+    db.query(PasswordResetCode).filter(PasswordResetCode.user_id == user_id).delete(synchronize_session=False)
+
+    db.execute(delete(friends_association).where(friends_association.c.user_id == user_id))
+    db.execute(delete(friends_association).where(friends_association.c.friend_id == user_id))
+
+    db.delete(user)
+    db.commit()
+
+    return RedirectResponse(url="/admin/users?msg=User+deleted+successfully", status_code=302)
