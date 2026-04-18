@@ -73,6 +73,85 @@ async def game_websocket(
     user_id = None
     role = None
     connected = False
+    game = None
+
+    async def handle_player_forfeit(
+        current_match_data, leaving_user_id: int, leaving_role: str, current_game
+    ):
+        if not current_match_data or leaving_user_id is None or leaving_role is None:
+            return
+
+        p1_id = int(decode_redis_value(current_match_data.get("p1")))
+        p2_id = int(decode_redis_value(current_match_data.get("p2")))
+        opponent_role = "goat" if leaving_role == "tiger" else "tiger"
+        winner_id = p2_id if leaving_user_id == p1_id else p1_id
+        loser_id = leaving_user_id
+
+        final_board = current_game.board if current_game else []
+        goats_captured = current_game.goats_captured if current_game else 0
+        total_moves = (
+            len(current_game.move_history)
+            if current_game and hasattr(current_game, "move_history")
+            else 0
+        )
+        moves_history = (
+            {"moves": current_game.move_history}
+            if current_game and hasattr(current_game, "move_history")
+            else None
+        )
+
+        await manager.broadcast_to_match(
+            matchId,
+            {
+                "type": "game_over",
+                "winner": opponent_role,
+                "reason": "opponent_left",
+                "message": f"{leaving_role.capitalize()} player left the game",
+                "final_board": final_board,
+            },
+        )
+
+        tiger_player_id = p2_id
+        goat_player_id = p1_id
+
+        tiger = db.query(User).filter(User.id == tiger_player_id).first()
+        goat = db.query(User).filter(User.id == goat_player_id).first()
+        tiger_elo_before = tiger.elo_rating if tiger else 1200.0
+        goat_elo_before = goat.elo_rating if goat else 1200.0
+
+        await update_elo_ratings(db, winner_id, loser_id)
+
+        if tiger:
+            db.refresh(tiger)
+        if goat:
+            db.refresh(goat)
+        tiger_elo_after = tiger.elo_rating if tiger else tiger_elo_before
+        goat_elo_after = goat.elo_rating if goat else goat_elo_before
+
+        result = "tiger_win" if opponent_role == "tiger" else "goat_win"
+
+        log_game(
+            db=db,
+            match_id=matchId,
+            tiger_player_id=tiger_player_id,
+            goat_player_id=goat_player_id,
+            winner_id=winner_id,
+            result=result,
+            goats_captured=goats_captured,
+            total_moves=total_moves,
+            game_duration_seconds=None,
+            tiger_elo_before=tiger_elo_before,
+            tiger_elo_after=tiger_elo_after,
+            goat_elo_before=goat_elo_before,
+            goat_elo_after=goat_elo_after,
+            moves_history=moves_history,
+        )
+
+        await save_replay(db, matchId, p1_id, p2_id, winner_id, [])
+        from app.services.matchmaking_service import cleanup_match
+
+        await cleanup_match(matchId)
+
     try:
         await websocket.accept()
         connected = True
@@ -149,65 +228,7 @@ async def game_websocket(
                     await manager.send_to_connection(websocket, {"type": "pong"})
                     continue
                 if move_type == "leave":
-                    # Player is leaving the game - opponent wins by forfeit
-                    opponent_role = "goat" if role == "tiger" else "tiger"
-                    p1_id = int(decode_redis_value(match_data.get("p1")))
-                    p2_id = int(decode_redis_value(match_data.get("p2")))
-
-                    # Determine winner (opponent of the player who left)
-                    winner_id = p2_id if user_id == p1_id else p1_id
-                    loser_id = user_id
-
-                    # Notify both players
-                    await manager.broadcast_to_match(
-                        matchId,
-                        {
-                            "type": "game_over",
-                            "winner": opponent_role,
-                            "reason": "opponent_left",
-                            "message": f"{role.capitalize()} player left the game",
-                            "final_board": game.board,
-                        },
-                    )
-
-                    # Update ELO and log game
-                    tiger_player_id = p2_id
-                    goat_player_id = p1_id
-
-                    tiger = db.query(User).filter(User.id == tiger_player_id).first()
-                    goat = db.query(User).filter(User.id == goat_player_id).first()
-                    tiger_elo_before = tiger.elo_rating if tiger else 1200.0
-                    goat_elo_before = goat.elo_rating if goat else 1200.0
-
-                    await update_elo_ratings(db, winner_id, loser_id)
-
-                    db.refresh(tiger)
-                    db.refresh(goat)
-                    tiger_elo_after = tiger.elo_rating
-                    goat_elo_after = goat.elo_rating
-
-                    result = "tiger_win" if opponent_role == "tiger" else "goat_win"
-
-                    log_game(
-                        db=db,
-                        match_id=matchId,
-                        tiger_player_id=tiger_player_id,
-                        goat_player_id=goat_player_id,
-                        winner_id=winner_id,
-                        result=result,
-                        goats_captured=game.goats_captured,
-                        total_moves=len(game.move_history) if hasattr(game, 'move_history') else 0,
-                        game_duration_seconds=None,
-                        tiger_elo_before=tiger_elo_before,
-                        tiger_elo_after=tiger_elo_after,
-                        goat_elo_before=goat_elo_before,
-                        goat_elo_after=goat_elo_after,
-                        moves_history={"moves": game.move_history} if hasattr(game, 'move_history') else None
-                    )
-
-                    await save_replay(db, matchId, p1_id, p2_id, winner_id, [])
-                    from app.services.matchmaking_service import cleanup_match
-                    await cleanup_match(matchId)
+                    await handle_player_forfeit(match_data, user_id, role, game)
                     break
                 if game.turn != role:
                     await manager.send_to_connection(
@@ -343,15 +364,13 @@ async def game_websocket(
                     websocket, {"type": "error", "message": "Internal server error"}
                 )
     except WebSocketDisconnect:
-        if matchId and role:
+        if matchId and role and user_id:
             try:
-                await manager.broadcast_to_match(
-                    matchId,
-                    {
-                        "type": "player_disconnected",
-                        "message": f"{role.capitalize()} player disconnected",
-                    },
-                )
+                current_match_data = await get_match_info(matchId)
+                if current_match_data:
+                    await handle_player_forfeit(
+                        current_match_data, user_id, role, manager.get_game(matchId)
+                    )
             except:
                 pass
     except Exception as e:
