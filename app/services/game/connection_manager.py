@@ -137,6 +137,7 @@ class ConnectionManager:
                 goats_captured_data = get_value("goats_captured") or "0"
                 phase_data = get_value("phase") or "1"
                 history_data = get_value("history") or "[]"
+                move_history_data = get_value("move_history") or "[]"
                 state = {
                     "board": json.loads(board_data),
                     "turn": turn_data,
@@ -144,6 +145,7 @@ class ConnectionManager:
                     "goats_captured": int(goats_captured_data),
                     "phase": int(phase_data),
                     "history": json.loads(history_data),
+                    "move_history": json.loads(move_history_data),
                 }
                 game.from_dict(state)
         self.games[match_id] = game
@@ -164,6 +166,7 @@ class ConnectionManager:
                 "goats_captured": game_state["goats_captured"],
                 "phase": game_state["phase"],
                 "history": json.dumps(game_state["history"]),
+                "move_history": json.dumps(game_state.get("move_history", [])),
             },
         )
 

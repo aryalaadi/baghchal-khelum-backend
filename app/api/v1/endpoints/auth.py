@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import logging
 from app.schemas.auth import (
     UserRegister,
     UserLogin,
@@ -22,6 +23,7 @@ from app.db.session import get_db
 from app.services.email_service import send_reset_code_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/register", response_model=Token)
@@ -81,10 +83,14 @@ def request_forgot_password(payload: ForgotPasswordRequest, db: Session = Depend
         return {"message": "If the email exists, a reset code has been sent."}
 
     code = create_password_reset_code(db, user.id)
-    try:
-        send_reset_code_email(user.email, user.username, code)
-    except Exception:
-        pass
+    success, reason = send_reset_code_email(user.email, user.username, code)
+    if not success:
+        logger.error(
+            "Failed to send password reset email for user_id=%s email=%s reason=%s",
+            user.id,
+            user.email,
+            reason,
+        )
 
     return {"message": "If the email exists, a reset code has been sent."}
 

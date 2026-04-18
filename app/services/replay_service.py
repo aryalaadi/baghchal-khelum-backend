@@ -12,14 +12,21 @@ async def save_replay(
     moves: List[dict],
 ):
     """Save game replay to database."""
-    replay = Replay(
-        game_id=game_id,
-        player1_id=player1_id,
-        player2_id=player2_id,
-        winner_id=winner_id,
-        moves=moves,
-    )
-    db.add(replay)
+    replay = db.query(Replay).filter(Replay.game_id == game_id).first()
+    if replay:
+        replay.player1_id = player1_id
+        replay.player2_id = player2_id
+        replay.winner_id = winner_id
+        replay.moves = moves or []
+    else:
+        replay = Replay(
+            game_id=game_id,
+            player1_id=player1_id,
+            player2_id=player2_id,
+            winner_id=winner_id,
+            moves=moves or [],
+        )
+        db.add(replay)
     db.commit()
     db.refresh(replay)
     return replay
