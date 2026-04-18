@@ -353,6 +353,14 @@ async def game_websocket(
                         },
                     )
             except WebSocketDisconnect:
+                try:
+                    current_match_data = await get_match_info(matchId)
+                    if current_match_data and user_id and role:
+                        await handle_player_forfeit(
+                            current_match_data, user_id, role, manager.get_game(matchId)
+                        )
+                except Exception:
+                    pass
                 break
             except json.JSONDecodeError:
                 await manager.send_to_connection(
