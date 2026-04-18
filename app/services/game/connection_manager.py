@@ -1,6 +1,7 @@
 import json
 import asyncio
 import uuid
+import os
 from typing import Dict, Set
 from fastapi import WebSocket
 from app.services.game.game_service import BaghChalGame
@@ -65,10 +66,14 @@ class ConnectionManager:
                     continue
 
                 if isinstance(message, dict) and "payload" in message:
-                    origin = message.get("_origin")
+                    origin_pid = message.get("_origin_pid")
                     payload_message = message.get("payload")
-                    if origin == self.instance_id:
-                        continue
+                    if origin_pid is not None:
+                        try:
+                            if int(origin_pid) == os.getpid():
+                                continue
+                        except Exception:
+                            pass
                     if isinstance(payload_message, dict):
                         await self._broadcast_local(match_id, payload_message)
                 elif isinstance(message, dict):
@@ -167,7 +172,7 @@ class ConnectionManager:
         await self._broadcast_local(match_id, message)
         try:
             redis = await get_redis()
-            envelope = {"_origin": self.instance_id, "payload": message}
+            envelope = {"_origin_pid": os.getpid(), "payload": message}
             await redis.publish(f"match_events:{match_id}", json.dumps(envelope))
         except Exception as e:
             print(f"Error publishing match event: {e}")
