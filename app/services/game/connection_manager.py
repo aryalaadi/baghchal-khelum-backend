@@ -93,6 +93,7 @@ class ConnectionManager:
                     await connection.send_json(message)
                 except Exception as e:
                     print(f"Error broadcasting to connection: {e}")
+                    await self.disconnect(connection)
 
     async def send_to_connection(self, websocket: WebSocket, message: dict):
         """Send message to specific connection."""
@@ -100,6 +101,7 @@ class ConnectionManager:
             await websocket.send_json(message)
         except Exception as e:
             print(f"Error sending to connection: {e}")
+            await self.disconnect(websocket)
 
     def get_game(self, match_id: str) -> BaghChalGame:
         """Get game instance for a match."""

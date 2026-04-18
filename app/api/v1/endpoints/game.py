@@ -103,16 +103,32 @@ async def game_websocket(
         p1_connected = await redis.get(f"ws_conn:{matchId}:{p1_id}")
         p2_connected = await redis.get(f"ws_conn:{matchId}:{p2_id}")
         both_connected = p1_connected and p2_connected
+        p1_user = db.query(User).filter(User.id == p1_id).first()
+        p2_user = db.query(User).filter(User.id == p2_id).first()
+        opponent_id = p2_id if user_id == p1_id else p1_id
+        current_user_db = p1_user if user_id == p1_id else p2_user
+        opponent_user_db = p2_user if user_id == p1_id else p1_user
         await manager.send_to_connection(
             websocket,
             {
                 "type": "start",
+                "match_id": matchId,
                 "board": game.board,
                 "turn": game.turn,
                 "phase": game.phase,
                 "role": role,
                 "goats_placed": game.goats_placed,
                 "goats_captured": game.goats_captured,
+                "player": {
+                    "id": user_id,
+                    "username": current_user_db.username if current_user_db else f"Player {user_id}",
+                    "elo_rating": current_user_db.elo_rating if current_user_db else 1200.0,
+                },
+                "opponent": {
+                    "id": opponent_id,
+                    "username": opponent_user_db.username if opponent_user_db else f"Player {opponent_id}",
+                    "elo_rating": opponent_user_db.elo_rating if opponent_user_db else 1200.0,
+                },
                 "both_players_connected": both_connected,
             },
         )
@@ -129,6 +145,9 @@ async def game_websocket(
                 data = await websocket.receive_text()
                 message = json.loads(data)
                 move_type = message.get("type")
+                if move_type == "ping":
+                    await manager.send_to_connection(websocket, {"type": "pong"})
+                    continue
                 if game.turn != role:
                     await manager.send_to_connection(
                         websocket, {"type": "error", "message": "Not your turn"}

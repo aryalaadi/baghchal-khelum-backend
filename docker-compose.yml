@@ -81,7 +81,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "${BACKEND_PORT:-8000}:8000"

@@ -84,6 +84,13 @@ async def respond_to_challenge(
             detail="Action must be 'accept' or 'decline'"
         )
     
+    challenge = friend_service.get_challenge_by_id(db, action_data.challenge_id)
+    if challenge is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Challenge not found"
+        )
+
     accept = action_data.action == "accept"
     match_id = await friend_service.respond_to_challenge(
         db, action_data.challenge_id, current_user.id, accept
@@ -94,6 +101,7 @@ async def respond_to_challenge(
             "message": "Challenge accepted",
             "match_id": match_id,
             "role": "tiger",
+            "opponent_id": challenge.challenger_id,
             "action": "accepted"
         }
     else:
