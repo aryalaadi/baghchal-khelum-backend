@@ -50,7 +50,8 @@ def get_user_by_username(db: Session, username: str) -> User:
 
 
 def get_user_by_email(db: Session, email: str) -> User:
-    return db.query(User).filter(User.email == email.lower()).first()
+    normalized_email = (email or "").strip().lower()
+    return db.query(User).filter(User.email == normalized_email).first()
 
 
 def create_password_reset_code(db: Session, user_id: int) -> str:
@@ -74,11 +75,17 @@ def create_password_reset_code(db: Session, user_id: int) -> str:
 def verify_password_reset_code(
     db: Session, user_id: int, code: str
 ) -> PasswordResetCode | None:
+    normalized_code = "".join(ch for ch in (code or "") if ch.isdigit())
+    if not normalized_code:
+        return None
+    if len(normalized_code) <= 6:
+        normalized_code = normalized_code.zfill(6)
+
     reset_entry = (
         db.query(PasswordResetCode)
         .filter(
             PasswordResetCode.user_id == user_id,
-            PasswordResetCode.code == code,
+            PasswordResetCode.code == normalized_code,
             PasswordResetCode.used == False,
         )
         .order_by(PasswordResetCode.created_at.desc())
@@ -86,7 +93,12 @@ def verify_password_reset_code(
     )
     if not reset_entry:
         return None
-    if reset_entry.expires_at < datetime.now(timezone.utc):
+
+    now = datetime.now(timezone.utc)
+    expires_at = reset_entry.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
         return None
     return reset_entry
 
