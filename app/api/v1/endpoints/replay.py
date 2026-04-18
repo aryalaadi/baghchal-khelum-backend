@@ -17,7 +17,8 @@ def get_game_replay(game_id: str, db: Session = Depends(get_db)):
         "player1_id": replay.player1_id,
         "player2_id": replay.player2_id,
         "winner_id": replay.winner_id,
-        "moves": replay.moves,
+        "moves": replay.moves or [],
+        "game_data": {"moves": replay.moves or []},
         "created_at": replay.created_at,
     }
 

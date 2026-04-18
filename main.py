@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from app.core.redis import get_redis, close_redis
 from app.core.config import settings
 from app.api.v1.router import api_router
+from app.api.admin import router as admin_router
 import traceback
 
 
@@ -56,6 +57,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(admin_router)
 
 try:
     app.mount("/tests", StaticFiles(directory="tests"), name="tests")

@@ -147,7 +147,12 @@ async def game_websocket(
             moves_history=moves_history,
         )
 
-        await save_replay(db, matchId, p1_id, p2_id, winner_id, [])
+        moves = (
+            current_game.move_history
+            if current_game and hasattr(current_game, "move_history")
+            else []
+        )
+        await save_replay(db, matchId, p1_id, p2_id, winner_id, moves)
         from app.services.matchmaking_service import cleanup_match
 
         await cleanup_match(matchId)
@@ -337,7 +342,7 @@ async def game_websocket(
                         moves_history={"moves": game.move_history} if hasattr(game, 'move_history') else None
                     )
                     
-                    moves = []  # Track moves in production
+                    moves = game.move_history if hasattr(game, "move_history") else []
                     await save_replay(db, matchId, p1_id, p2_id, winner_id, moves)
                     from app.services.matchmaking_service import cleanup_match
 

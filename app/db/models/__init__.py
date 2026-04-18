@@ -3,5 +3,6 @@ from app.db.models.replay import Replay
 from app.db.models.community import Post
 from app.db.models.game_log import GameLog
 from app.db.models.friend_challenge import FriendChallenge
+from app.db.models.password_reset_code import PasswordResetCode
 
-__all__ = ["User", "Replay", "Post", "GameLog", "FriendChallenge"]
+__all__ = ["User", "Replay", "Post", "GameLog", "FriendChallenge", "PasswordResetCode"]

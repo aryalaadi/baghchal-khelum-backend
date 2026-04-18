@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.models.user import User
 from app.db.models.community import Post
 from app.db.models.replay import Replay
+from app.db.models.password_reset_code import PasswordResetCode
 
 # this is the Alembic Config object
 config = context.config

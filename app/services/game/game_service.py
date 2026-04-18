@@ -47,6 +47,7 @@ class BaghChalGame:
         self.phase = 1  # 1 = placing goats, 2 = moving goats
         self.history: Set[str] = set()
         self.total_goats = 20
+        self.move_history = []
 
     def get_board_hash(self) -> str:
         """Get unique hash of current board state."""
@@ -69,6 +70,7 @@ class BaghChalGame:
             return False, "Position already occupied"
         self.board[position] = GOAT
         self.goats_placed += 1
+        self.move_history.append({"type": "place", "position": position})
         if self.goats_placed >= self.total_goats:
             self.phase = 2
         self.turn = "tiger"
@@ -132,6 +134,14 @@ class BaghChalGame:
             self.board[from_pos] = EMPTY
             self.board[to_pos] = TIGER
             self.goats_captured += 1
+            self.move_history.append(
+                {
+                    "type": "move",
+                    "from": from_pos,
+                    "to": to_pos,
+                    "captured": goat_pos,
+                }
+            )
             self.turn = "goat"
             return True, "Tiger captured goat", goat_pos
         else:
@@ -143,6 +153,7 @@ class BaghChalGame:
                 )
             self.board[from_pos] = EMPTY
             self.board[to_pos] = TIGER
+            self.move_history.append({"type": "move", "from": from_pos, "to": to_pos})
             self.turn = "goat"
             return True, "Tiger moved", None
 
@@ -168,6 +179,7 @@ class BaghChalGame:
             self.board[to_pos] = EMPTY
             return False, "Move would repeat a previous board state"
         self.history.add(board_hash)
+        self.move_history.append({"type": "move", "from": from_pos, "to": to_pos})
         self.turn = "tiger"
         return True, "Goat moved"
 
@@ -213,6 +225,7 @@ class BaghChalGame:
             "goats_captured": self.goats_captured,
             "phase": self.phase,
             "history": list(self.history),
+            "move_history": self.move_history,
         }
 
     def from_dict(self, data: dict):
@@ -223,3 +236,4 @@ class BaghChalGame:
         self.goats_captured = data.get("goats_captured", self.goats_captured)
         self.phase = data.get("phase", self.phase)
         self.history = set(data.get("history", []))
+        self.move_history = data.get("move_history", [])
