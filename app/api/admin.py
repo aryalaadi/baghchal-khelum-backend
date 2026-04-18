@@ -54,11 +54,16 @@ def _admin_page_wrapper(title: str, body_html: str) -> HTMLResponse:
               button.secondary {{ background: #374151; }}
               button.success {{ background: var(--accent); color: #08120b; font-weight: 600; }}
               button.danger {{ background: var(--danger); }}
+              .btn {{ display: inline-block; text-decoration: none; border: none; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #fff; background: #2563eb; font-size: 13px; }}
+              .btn.secondary {{ background: #374151; }}
+              .btn.danger {{ background: var(--danger); }}
               table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
               th, td {{ border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: top; }}
               th {{ color: var(--muted); font-weight: 600; }}
               .row {{ display: flex; gap: 8px; align-items: center; }}
               .row > * {{ flex: 1; }}
+              .row.auto > * {{ flex: 0 0 auto; }}
+              .row.auto .grow {{ flex: 1 1 auto; }}
               .mt {{ margin-top: 12px; }}
               .message {{ margin: 10px 0; padding: 10px; border-radius: 8px; background: #052e1d; border: 1px solid #065f46; }}
               .error {{ background: #3f0f14; border-color: #7f1d1d; }}
@@ -244,32 +249,26 @@ def admin_users(
             f"""
             <tr>
               <td>{user.id}</td>
-              <td colspan='10'>
-                <form method='post' action='/admin/users/{user.id}/update'>
-                  <div class='row'>
-                    <input name='username' value='{html.escape(user.username)}' placeholder='username' required />
-                    <input name='email' value='{html.escape(user.email or "")}' placeholder='email' required />
-                    <input type='number' step='0.1' name='elo_rating' value='{user.elo_rating}' placeholder='ELO' required />
-                    <input type='number' name='games_played' value='{user.games_played}' placeholder='Played' required />
-                    <input type='number' name='games_won' value='{user.games_won}' placeholder='Won' required />
-                    <input type='number' name='games_lost' value='{user.games_lost}' placeholder='Lost' required />
-                    <input type='number' name='games_drawn' value='{user.games_drawn}' placeholder='Drawn' required />
-                    <input type='number' name='goats_captured_total' value='{user.goats_captured_total}' placeholder='Goats cap.' required />
-                    <input name='new_password' type='password' placeholder='New password (optional)' />
-                  </div>
-                  <div class='row mt'>
-                    <button class='success' type='submit'>Save User #{user.id}</button>
-                  </div>
-                </form>
-                <form method='post' action='/admin/users/{user.id}/delete' class='mt' onsubmit='return confirm("Delete user #{user.id} and all related records?")'>
-                  <button class='danger' type='submit'>Delete Account</button>
-                </form>
+              <td>{html.escape(user.username)}</td>
+              <td>{html.escape(user.email or '-')}</td>
+              <td>{user.elo_rating:.1f}</td>
+              <td>{user.games_played}</td>
+              <td>{user.games_won}</td>
+              <td>{user.games_lost}</td>
+              <td>{user.games_drawn}</td>
+              <td>
+                <div class='row auto'>
+                  <a class='btn secondary' href='/admin/users/{user.id}/edit'>Edit</a>
+                  <form method='post' action='/admin/users/{user.id}/delete' onsubmit='return confirm("Delete user #{user.id} and all related records?")' style='margin:0;'>
+                    <button class='danger' type='submit'>Delete</button>
+                  </form>
+                </div>
               </td>
             </tr>
             """
         )
 
-    users_html = "".join(user_rows) if user_rows else "<tr><td colspan='11'>No users found.</td></tr>"
+    users_html = "".join(user_rows) if user_rows else "<tr><td colspan='9'>No users found.</td></tr>"
 
     return _admin_page_wrapper(
         "Admin Users",
@@ -296,7 +295,8 @@ def admin_users(
                 <option value='desc' {'selected' if sort_order_safe == 'desc' else ''}>Desc</option>
                 <option value='asc' {'selected' if sort_order_safe == 'asc' else ''}>Asc</option>
               </select>
-              <button type='submit'>Apply</button>
+              <button type='submit'>Search</button>
+              <a class='btn secondary' href='/admin/users'>Reset</a>
             </div>
           </form>
         </div>
@@ -315,11 +315,66 @@ def admin_users(
         </div>
 
         <div class='card mt'>
-          <h3 style='margin-top:0'>User CRUD (max 200 records)</h3>
+          <h3 style='margin-top:0'>Users (max 200)</h3>
           <table>
-            <tr><th>ID</th><th>User Data</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>ELO</th>
+              <th>Played</th>
+              <th>Won</th>
+              <th>Lost</th>
+              <th>Drawn</th>
+              <th>Actions</th>
+            </tr>
             {users_html}
           </table>
+        </div>
+        """,
+    )
+
+
+@router.get("/admin/users/{user_id}/edit", response_class=HTMLResponse)
+def admin_edit_user_page(user_id: int, request: Request, db: Session = Depends(get_db)):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/admin", status_code=302)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return RedirectResponse(url="/admin/users?err=User+not+found", status_code=302)
+
+    return _admin_page_wrapper(
+        f"Edit User {user_id}",
+        f"""
+        <div class='card'>
+          <div class='row auto' style='justify-content:space-between;margin-bottom:8px;'>
+            <h3 style='margin:0'>Edit User #{user.id}</h3>
+            <a class='btn secondary' href='/admin/users'>Back to Users</a>
+          </div>
+          <form method='post' action='/admin/users/{user.id}/update'>
+            <div class='row'>
+              <input name='username' value='{html.escape(user.username)}' placeholder='username' required />
+              <input name='email' value='{html.escape(user.email or "")}' placeholder='email' required />
+              <input type='number' step='0.1' name='elo_rating' value='{user.elo_rating}' placeholder='ELO' required />
+            </div>
+            <div class='row mt'>
+              <input type='number' name='games_played' value='{user.games_played}' placeholder='Played' required />
+              <input type='number' name='games_won' value='{user.games_won}' placeholder='Won' required />
+              <input type='number' name='games_lost' value='{user.games_lost}' placeholder='Lost' required />
+              <input type='number' name='games_drawn' value='{user.games_drawn}' placeholder='Drawn' required />
+              <input type='number' name='goats_captured_total' value='{user.goats_captured_total}' placeholder='Goats captured' required />
+            </div>
+            <div class='row mt'>
+              <input class='grow' name='new_password' type='password' placeholder='New password (optional)' />
+            </div>
+            <div class='row auto mt'>
+              <button class='success' type='submit'>Save Changes</button>
+            </div>
+          </form>
+          <form method='post' action='/admin/users/{user.id}/delete' class='mt' onsubmit='return confirm("Delete user #{user.id} and all related records?")'>
+            <button class='danger' type='submit'>Delete Account</button>
+          </form>
         </div>
         """,
     )
