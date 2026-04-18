@@ -1,5 +1,6 @@
 import json
 import asyncio
+import uuid
 from typing import Dict, Set
 from fastapi import WebSocket
 from app.services.game.game_service import BaghChalGame
@@ -11,6 +12,7 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         self.games: Dict[str, BaghChalGame] = {}
         self.connection_info: Dict[WebSocket, tuple] = {}
+        self.instance_id = str(uuid.uuid4())
         self.pubsub = None
         self.pubsub_reader_task = None
         self.subscribed_matches: Set[str] = set()
@@ -62,7 +64,15 @@ class ConnectionManager:
                 except Exception:
                     continue
 
-                await self._broadcast_local(match_id, message)
+                if isinstance(message, dict) and "payload" in message:
+                    origin = message.get("_origin")
+                    payload_message = message.get("payload")
+                    if origin == self.instance_id:
+                        continue
+                    if isinstance(payload_message, dict):
+                        await self._broadcast_local(match_id, payload_message)
+                elif isinstance(message, dict):
+                    await self._broadcast_local(match_id, message)
         except Exception as e:
             print(f"PubSub reader stopped: {e}")
 
@@ -154,8 +164,13 @@ class ConnectionManager:
 
     async def broadcast_to_match(self, match_id: str, message: dict):
         """Broadcast message to all connections in a match."""
-        redis = await get_redis()
-        await redis.publish(f"match_events:{match_id}", json.dumps(message))
+        await self._broadcast_local(match_id, message)
+        try:
+            redis = await get_redis()
+            envelope = {"_origin": self.instance_id, "payload": message}
+            await redis.publish(f"match_events:{match_id}", json.dumps(envelope))
+        except Exception as e:
+            print(f"Error publishing match event: {e}")
 
     async def send_to_connection(self, websocket: WebSocket, message: dict):
         """Send message to specific connection."""
